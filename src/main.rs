@@ -20,10 +20,9 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let ard = app.get_application_related_data().unwrap();
             let fingerprints = ard.get_fingerprints().unwrap();
 
-            eprintln!(" FPS: {:?}", fingerprints);
             if fingerprints.decryption().unwrap().to_string() == fingerprint {
                 let body = hyper::body::to_bytes(req.into_body()).await?;
-		let pin = String::from_utf8_lossy(&body);
+                let pin = String::from_utf8_lossy(&body);
                 if app.verify_pw1(&pin).is_err() {
                     return Ok(Response::builder()
                         .status(http::StatusCode::UNAUTHORIZED)
@@ -31,25 +30,26 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                         .unwrap());
                 }
 
-                let algo = ard.get_algorithm_attributes(openpgp_card::KeyType::Decryption).unwrap();
+                let algo = ard
+                    .get_algorithm_attributes(openpgp_card::KeyType::Decryption)
+                    .unwrap();
 
-                eprintln!(" ALGO: {:?}", algo);
                 let mut resp = Response::default();
 
-		let op = match algo {
-		    openpgp_card::algorithm::Algo::Rsa(..) => "rsa-decrypt",
-		    openpgp_card::algorithm::Algo::Ecc(..) => "derive",
-		    _ => panic!("Unsupported algo"),
-		};
+                let op = match algo {
+                    openpgp_card::algorithm::Algo::Rsa(..) => "rsa-decrypt",
+                    openpgp_card::algorithm::Algo::Ecc(..) => "derive",
+                    _ => panic!("Unsupported algo"),
+                };
 
-		let hint = if let openpgp_card::algorithm::Algo::Ecc(attrs) = algo {
-		    match attrs.curve() {
-			openpgp_card::algorithm::Curve::Cv25519 => "Cv25519",
-			_ => "-",
-		    }
-		} else {
-		    ""
-		};
+                let hint = if let openpgp_card::algorithm::Algo::Ecc(attrs) = algo {
+                    match attrs.curve() {
+                        openpgp_card::algorithm::Curve::Cv25519 => "Cv25519",
+                        _ => "-",
+                    }
+                } else {
+                    ""
+                };
 
                 resp.headers_mut().insert(
                     "Location",
@@ -57,7 +57,65 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                         &http::Uri::builder()
                             .scheme("http")
                             .authority("localhost:3000")
-                            .path_and_query(format!("/{}/{}/{}/{}", ard.get_application_id().unwrap().ident(), op, hint, pin))
+                            .path_and_query(format!(
+                                "/{}/{}/{}/{}",
+                                ard.get_application_id().unwrap().ident(),
+                                op,
+                                hint,
+                                pin
+                            ))
+                            .build()
+                            .unwrap()
+                            .to_string(),
+                    )
+                    .unwrap(),
+                );
+
+                return Ok(resp);
+            } else if fingerprints.signature().unwrap().to_string() == fingerprint {
+                let body = hyper::body::to_bytes(req.into_body()).await?;
+                let pin = String::from_utf8_lossy(&body);
+                if app.verify_pw1_for_signing(&pin).is_err() {
+                    return Ok(Response::builder()
+                        .status(http::StatusCode::UNAUTHORIZED)
+                        .body(Default::default())
+                        .unwrap());
+                }
+
+                let algo = ard
+                    .get_algorithm_attributes(openpgp_card::KeyType::Signing)
+                    .unwrap();
+
+                let mut resp = Response::default();
+
+                let op = match algo {
+                    openpgp_card::algorithm::Algo::Rsa(..) => "rsa-sign",
+                    openpgp_card::algorithm::Algo::Ecc(..) => "ecc-sign",
+                    _ => panic!("Unsupported algo"),
+                };
+
+                let hint = if let openpgp_card::algorithm::Algo::Ecc(attrs) = algo {
+                    match attrs.curve() {
+                        openpgp_card::algorithm::Curve::Ed25519 => "Ed25519",
+                        _ => "-",
+                    }
+                } else {
+                    ""
+                };
+
+                resp.headers_mut().insert(
+                    "Location",
+                    hyper::header::HeaderValue::from_str(
+                        &http::Uri::builder()
+                            .scheme("http")
+                            .authority("localhost:3000")
+                            .path_and_query(format!(
+                                "/{}/{}/{}/{}/",
+                                ard.get_application_id().unwrap().ident(),
+                                op,
+                                hint,
+                                pin
+                            ))
                             .build()
                             .unwrap()
                             .to_string(),
@@ -67,6 +125,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
                 return Ok(resp);
             }
+
             //let algo = algo.get_by_keytype(openpgp_card::KeyType::Signing);
 
             //eprintln!(" FPS: {:?}", fingerprints);
@@ -109,20 +168,19 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         let card_ident = split[0];
 
         let curve = split[2];
-	let pin = split[3];
+        let pin = split[3];
         let mut app = openpgp_card::CardApp::from(
             openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
         );
 
-                if app.verify_pw1(&pin).is_err() {
-                    return Ok(Response::builder()
-                        .status(http::StatusCode::UNAUTHORIZED)
-                        .body(Default::default())
-                        .unwrap());
-                }
+        if app.verify_pw1(&pin).is_err() {
+            return Ok(Response::builder()
+                .status(http::StatusCode::UNAUTHORIZED)
+                .body(Default::default())
+                .unwrap());
+        }
 
-
-	let body = hyper::body::to_bytes(req.into_body()).await?;
+        let body = hyper::body::to_bytes(req.into_body()).await?;
 
         let dm = if curve == "Cv25519" {
             // Ephemeral key without header byte 0x40
@@ -152,11 +210,76 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             dec = dec[1..33].to_vec();
         }
         Ok(Response::new(Body::from(dec)))
+    } else if op == "rsa-sign" {
+        let card_ident = split[0];
+
+        let pin = split[3];
+        let mut app = openpgp_card::CardApp::from(
+            openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+        );
+
+        if app.verify_pw1_for_signing(&pin).is_err() {
+            return Ok(Response::builder()
+                .status(http::StatusCode::UNAUTHORIZED)
+                .body(Default::default())
+                .unwrap());
+        }
+
+        use openpgp_card::crypto_data::Hash;
+        use std::convert::TryInto;
+
+        let query = req.uri().query().unwrap().to_string();
+        let digest = hyper::body::to_bytes(req.into_body()).await?.to_vec();
+
+        let hash = if query.contains("SHA-256") {
+            Hash::SHA256(digest.try_into().unwrap())
+        } else if query.contains("SHA-384") {
+            Hash::SHA384(digest.try_into().unwrap())
+        } else if query.contains("SHA-512") {
+            Hash::SHA512(digest.try_into().unwrap())
+        } else {
+            panic!("Unsupported digest.");
+        };
+
+        let sig = app.signature_for_hash(hash).unwrap();
+
+        Ok(Response::new(Body::from(sig)))
+    } else if op == "ecc-sign" {
+        let card_ident = split[0];
+
+        let eddsa = split[2] == "Ed25519";
+
+        let pin = split[3];
+        let mut app = openpgp_card::CardApp::from(
+            openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+        );
+        if app.verify_pw1_for_signing(&pin).is_err() {
+            return Ok(Response::builder()
+                .status(http::StatusCode::UNAUTHORIZED)
+                .body(Default::default())
+                .unwrap());
+        }
+
+        use openpgp_card::crypto_data::Hash;
+        //use std::convert::TryInto;
+
+        //let query = req.uri().query().unwrap().to_string();
+        let digest = hyper::body::to_bytes(req.into_body()).await?.to_vec();
+
+        let hash = if eddsa {
+            Hash::EdDSA(&digest)
+        } else {
+            Hash::ECDSA(&digest)
+        };
+
+        let sig = app.signature_for_hash(hash).unwrap();
+
+        Ok(Response::new(Body::from(sig)))
     } else {
-        Ok(Response::new(Body::from(format!(
-            "Hello World: {:?}",
-            split
-        ))))
+        Ok(Response::builder()
+            .status(http::StatusCode::NOT_FOUND)
+            .body(Default::default())
+            .unwrap())
     }
 }
 
