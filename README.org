@@ -1,4 +1,4 @@
-# OpenPGP Card store
+#+TITLE: OpenPGP Card store
 
 This is an experimental Private Key Store that enables clients to
 access and use cryptographic keys stored on OpenPGP Cards.
@@ -13,3 +13,7 @@ client's request.
 WARNING: This is not production ready! Most importantly the crate
 leaks data in the capability URLs (in production systems all private
 data should be encrypted).
+
+# Running
+
+=cargo run= will start the store and listen on port 3000.
