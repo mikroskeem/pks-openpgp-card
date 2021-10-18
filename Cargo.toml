@@ -13,4 +13,4 @@ openpgp-card = "0.0.4"
 http = "0.2.5"
 url = "2.2.2"
 anyhow = "1"
-
+hex = "0.4.3"

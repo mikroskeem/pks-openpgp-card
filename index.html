@@ -1,0 +1,66 @@
+<!doctype html>
+<title>Store: Demo page</title>
+<h2>Demo page</h2>
+<style>
+  input:not([type=submit]), output { width: 75%; padding: 2px; margin: 4px; font-family: monospace }
+  </style>
+
+<script>
+  function getcap(e) {
+      e.preventDefault();
+      let resp = fetch("/" + document.getElementById("fpr").value + "?capability=" + document.getElementById("cap").value, {
+	  body: document.getElementById("pin").value,
+	  method: "POST",
+      }).then(resp => {
+	  document.getElementById('capout').value = resp.headers.get("Location");
+      });
+      return false;
+  }
+
+  function dec(e) {
+      e.preventDefault();
+      let hex = document.getElementById("symmetric").value;
+      let body = new Uint8Array(hex.match(/[\da-f]{2}/gi).map(function (h) {
+	  return parseInt(h, 16)
+      }));
+      let resp = fetch(document.getElementById("capout").value, {
+	  body,
+	  method: "POST",
+      }).then(resp => resp.arrayBuffer()).then(buffer => {
+	  function buf2hex(buffer) { // buffer is an ArrayBuffer
+	      return [...new Uint8Array(buffer)]
+		  .map(x => x.toString(16).padStart(2, '0'))
+		  .join('');
+	  }
+
+	  document.getElementById('symout').value = buf2hex(buffer);//resp.headers.get("Location");
+      });      
+      return false;
+  }
+</script>
+
+<h3>Get cap</h3>
+<form id="capform">
+  <input id="fpr" placeholder="F99A81E09CD8814B571DBF4AEB0BE68CD9CF08F1"><br>
+  <select id="cap">
+    <option value="decrypt">decrypt</option>
+    <option value="sign">sign</option>
+  </select>
+  <br>
+  <input id="pin" value="" placeholder="PIN"><br>
+  <input type="submit">
+</form>
+
+<h3>Decrypt/sign</h3>
+<p>This form encodes and decodes hex (sent and received bytes are raw)</p>
+<form id="decryptform">
+  <input id="capout"><br>
+  <input id="symmetric" value="401cddec1ecb6bf34d8beae47bf74d2c8bcdaf58eb0502f319354351063910b574"><br>
+  <output id="symout" placeholder="Symmetric out"></output><br>
+  <input type="submit">
+</form>
+
+<script>
+  document.getElementById("capform").addEventListener("submit", getcap);
+  document.getElementById("decryptform").addEventListener("submit", dec);
+</script>

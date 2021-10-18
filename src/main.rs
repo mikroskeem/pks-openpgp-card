@@ -5,22 +5,32 @@ use std::net::SocketAddr;
 
 async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     eprintln!(": {}", req.uri());
+
     let split = req.uri().to_string();
+    let split = split.split("?").collect::<Vec<_>>()[0];
     let split = split.split("/").collect::<Vec<_>>().split_off(1);
     //    let params = url::Url::parse(&req.uri().to_string()).unwrap();
     //let params = req.uri().query_pairs().collect::<Vec<_>>();
     //eprintln!(" P: {:?}", params);
 
     let fingerprint = split[0];
-    let op = split[1];
+    if split.len() == 1 {
+        if fingerprint.is_empty() {
+	    let body = std::fs::read_to_string("index.html").unwrap();
+            return Ok(Response::new(Body::from(body)));
+	} else if fingerprint == "favicon.ico" {
+            return Ok(Response::new(Body::default()));
+	}
+	//return Ok(Response::
 
-    if op == "check" {
         for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or(Vec::new()) {
             let mut app = openpgp_card::CardApp::from(card);
             let ard = app.get_application_related_data().unwrap();
             let fingerprints = ard.get_fingerprints().unwrap();
+	    eprintln!("FPRS: {:?}", fingerprints);
 
             if fingerprints.decryption().unwrap().to_string() == fingerprint {
+		eprintln!("FOUND!");
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
                 if app.verify_pw1(&pin).is_err() {
@@ -125,12 +135,8 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
                 return Ok(resp);
             }
-
-            //let algo = algo.get_by_keytype(openpgp_card::KeyType::Signing);
-
-            //eprintln!(" FPS: {:?}", fingerprints);
         }
-        Ok(Response::builder()
+        return Ok(Response::builder()
             .status(http::StatusCode::NOT_FOUND)
             .body(Default::default())
             .unwrap())
@@ -148,7 +154,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             .body(Default::default())
             .unwrap())
     }*/
-    } else if op == "rsa-decrypt" {
+    } else {
+
+    let op = split[1];
+
+    if op == "rsa-decrypt" {
         let card_ident = split[2];
 
         let mut app = openpgp_card::CardApp::from(
@@ -181,6 +191,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         }
 
         let body = hyper::body::to_bytes(req.into_body()).await?;
+	eprintln!("BODY = {}", hex::encode(&body));
 
         let dm = if curve == "Cv25519" {
             // Ephemeral key without header byte 0x40
@@ -280,6 +291,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             .status(http::StatusCode::NOT_FOUND)
             .body(Default::default())
             .unwrap())
+    }
     }
 }
 

@@ -1,0 +1,15 @@
+# OpenPGP Card store
+
+This is an experimental Private Key Store that enables clients to
+access and use cryptographic keys stored on OpenPGP Cards.
+
+The operations are only private key operations (decryption, signing,
+ECDH derivation).
+
+There is no configuration as this store automatically detects all
+cards connected to the system and selects appropriate one based on
+client's request.
+
+WARNING: This is not production ready! Most importantly the crate
+leaks data in the capability URLs (in production systems all private
+data should be encrypted).
