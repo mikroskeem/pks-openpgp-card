@@ -5,6 +5,9 @@ use std::net::SocketAddr;
 
 async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     eprintln!(": {}", req.uri());
+    if let Some(auth) = req.headers().get("authorization") {
+	eprintln!("  -> with auth: {:?}", auth);
+    }
 
     let split = req.uri().to_string();
     let split = split.split("?").collect::<Vec<_>>()[0];
