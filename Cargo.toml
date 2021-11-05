@@ -8,9 +8,10 @@ edition = "2018"
 [dependencies]
 hyper = { version = "0.14.13", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
-openpgp-card-pcsc = "0.0.4"
-openpgp-card = "0.0.4"
+openpgp-card-pcsc = { version = "0", git = "https://gitlab.com/hkos/openpgp-card" }
+openpgp-card = { version = "0", git = "https://gitlab.com/hkos/openpgp-card" }
 http = "0.2.5"
 url = "2.2.2"
 anyhow = "1"
 hex = "0.4.3"
+hyperlocal = "0.8"
