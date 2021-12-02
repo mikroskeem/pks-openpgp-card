@@ -1,6 +1,8 @@
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use hyperlocal::UnixServerExt;
+use openpgp_card::crypto_data::PublicKeyMaterial;
+use openpgp_card::KeyType;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
@@ -216,7 +218,44 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     } else {
         let op = split[1];
 
-        if op == "rsa-decrypt" {
+        if op == "public" {
+            let fingerprint = split[0];
+            for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or(Vec::new()) {
+                let mut app = openpgp_card::CardApp::from(card);
+                let ard = app.get_application_related_data().unwrap();
+                let fingerprints = ard.get_fingerprints().unwrap();
+                let key_type = if fingerprints.signature().unwrap().to_string() == fingerprint {
+                    Some(KeyType::Signing)
+                } else if fingerprints.decryption().unwrap().to_string() == fingerprint {
+                    Some(KeyType::Decryption)
+                } else if fingerprints.authentication().unwrap().to_string() == fingerprint {
+                    Some(KeyType::Authentication)
+                } else {
+                    None
+                };
+                if let Some(key_type) = key_type {
+                    let pub_key = app.get_pub_key(key_type).unwrap();
+                    eprintln!("PK: {:#?}", pub_key);
+                    let (content_type, data) = match pub_key {
+                        PublicKeyMaterial::R(ref rsa) => {
+                            ("application/prs.wiktor.rsa", rsa.n().to_vec())
+                        }
+                        PublicKeyMaterial::E(ref ecc) => {
+                            ("application/prs.wiktor.ed25519", ecc.data().to_vec())
+                        }
+                        _ => panic!("Unsupported key type"),
+                    };
+                    let mut resp = Response::builder();
+                    resp = resp.header("Content-Type", content_type);
+
+                    return Ok(resp.body(Body::from(data)).unwrap());
+                }
+            }
+            Ok(Response::builder()
+                .status(http::StatusCode::NOT_FOUND)
+                .body(Default::default())
+                .unwrap())
+        } else if op == "rsa-decrypt" {
             let card_ident = split[2];
 
             let mut app = openpgp_card::CardApp::from(
