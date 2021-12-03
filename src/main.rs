@@ -38,7 +38,8 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let fingerprints = ard.get_fingerprints().unwrap();
             eprintln!("FPRS: {:?}", fingerprints);
 
-            if fingerprints.decryption().unwrap().to_string() == fingerprint {
+            if fingerprints.decryption().map_or("".into(), |fp| fp.to_string()) ==
+                fingerprint {
                 eprintln!("FOUND!");
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
@@ -91,7 +92,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 );
 
                 return Ok(resp);
-            } else if fingerprints.signature().unwrap().to_string() == fingerprint {
+            } else if fingerprints.signature().map_or("".into(), |fp| fp.to_string()) == fingerprint {
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
                 if app.verify_pw1_for_signing(&pin).is_err() {
@@ -143,7 +144,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 );
 
                 return Ok(resp);
-            } else if fingerprints.authentication().unwrap().to_string() == fingerprint {
+            } else if fingerprints.authentication().map_or("".into(), |fp| fp.to_string()) == fingerprint {
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
                 if app.verify_pw1(&pin).is_err() {
