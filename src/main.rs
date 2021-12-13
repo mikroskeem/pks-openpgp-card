@@ -424,6 +424,45 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 .header("Content-Type", "application/vnd.pks.signature.eddsa.rs")
                 .body(Body::from(sig))
                 .unwrap())
+        } else if op == "rsa-auth" {
+            eprintln!("rsa-auth");
+
+            let card_ident = split[0];
+
+            let pin = split[3];
+            let mut app = openpgp_card::CardApp::from(
+                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+            );
+
+            if app.verify_pw1(&pin).is_err() {
+                return Ok(Response::builder()
+                    .status(http::StatusCode::UNAUTHORIZED)
+                    .body(Default::default())
+                    .unwrap());
+            }
+
+            use openpgp_card::crypto_data::Hash;
+            use std::convert::TryInto;
+
+            // let query = req.uri().query().unwrap().to_string();
+            let data = hyper::body::to_bytes(req.into_body()).await?.to_vec();
+
+            use sha2::{Digest, Sha256};
+
+            // FIXME: Hash the data according to "flags"
+            // (for now SSH_AGENT_RSA_SHA2_256 is hardcoded)
+            let mut hasher = Sha256::new();
+            hasher.update(data);
+            let digest = hasher.finalize();
+
+            let hash = Hash::SHA256(digest.to_vec().try_into().unwrap());
+
+            let sig = app.authenticate_for_hash(hash).unwrap();
+
+            Ok(Response::builder()
+                .header("Content-Type", "application/vnd.pks.signature.rsa")
+                .body(Body::from(sig))
+                .unwrap())
         } else if op == "ecc-auth" {
             let card_ident = split[0];
 
