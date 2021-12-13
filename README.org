@@ -1,4 +1,5 @@
 #+TITLE: OpenPGP Card store
+#+PROPERTY: header-args :tangle yes :exports both
 
 This is an experimental Private Key Store that enables clients to
 access and use cryptographic keys stored on OpenPGP Cards.
@@ -17,3 +18,16 @@ data should be encrypted).
 # Running
 
 =cargo run= will start the store and listen on port 3000.
+
+# Displaying keys
+
+There is a secret endpoint:
+
+#+BEGIN_SRC sh :results verbatim
+  curl localhost:3000/keys
+#+END_SRC
+
+#+RESULTS:
+: E7E2B84A36457BEA3F43692DE68BE3B312FA33FC # 0006:15422467 S
+: F99A81E09CD8814B571DBF4AEB0BE68CD9CF08F1 # 0006:15422467 E
+: 3BA4FE02BF714A7789CB2E0051F23D6C0529CE0A # 0006:15422467 A

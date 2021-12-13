@@ -29,6 +29,24 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             return Ok(Response::new(Body::from(body)));
         } else if fingerprint == "favicon.ico" {
             return Ok(Response::new(Body::default()));
+        } else if fingerprint == "keys" {
+            let mut buf = String::new();
+            for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or_default() {
+                let mut app = openpgp_card::CardApp::from(card);
+                let ard = app.get_application_related_data().unwrap();
+                let fingerprints = ard.get_fingerprints().unwrap();
+                let card_id = ard.get_application_id().unwrap().ident();
+                if let Some(fpr) = fingerprints.signature() {
+                    buf += &format!("{} # {} S\n", fpr, card_id);
+                }
+                if let Some(fpr) = fingerprints.decryption() {
+                    buf += &format!("{} # {} E\n", fpr, card_id);
+                }
+                if let Some(fpr) = fingerprints.authentication() {
+                    buf += &format!("{} # {} A\n", fpr, card_id);
+                }
+            }
+            return Ok(Response::new(Body::from(buf)));
         }
         //return Ok(Response::
 
