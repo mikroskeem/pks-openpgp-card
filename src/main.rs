@@ -337,14 +337,14 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             use openpgp_card::crypto_data::Hash;
             use std::convert::TryInto;
 
-            let query = req.uri().query().unwrap().to_string();
+            let query = req.headers().get("Content-Type").and_then(|v|v.to_str().ok()).unwrap_or("application/vnd.pks.digest.sha512").to_string();
             let digest = hyper::body::to_bytes(req.into_body()).await?.to_vec();
 
-            let hash = if query.contains("SHA-256") {
+            let hash = if query == "application/vnd.pks.digest.sha256" {
                 Hash::SHA256(digest.try_into().unwrap())
-            } else if query.contains("SHA-384") {
+            } else if query == "application/vnd.pks.digest.sha384" {
                 Hash::SHA384(digest.try_into().unwrap())
-            } else if query.contains("SHA-512") {
+            } else if query == "application/vnd.pks.digest.sha512" {
                 Hash::SHA512(digest.try_into().unwrap())
             } else {
                 panic!("Unsupported digest.");
