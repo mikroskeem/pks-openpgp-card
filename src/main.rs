@@ -1,6 +1,6 @@
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
-use hyperlocal::UnixServerExt;
+//use hyperlocal::UnixServerExt;
 use openpgp_card::crypto_data::PublicKeyMaterial;
 use openpgp_card::KeyType;
 use std::convert::Infallible;
@@ -403,8 +403,6 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         } else if op == "ecc-auth" {
             let card_ident = split[0];
 
-            let eddsa = split[2] == "Ed25519";
-
             let pin = split[3];
             let mut app = openpgp_card::CardApp::from(
                 openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
@@ -416,7 +414,6 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                     .unwrap());
             }
 
-            use openpgp_card::crypto_data::Hash;
             //use std::convert::TryInto;
 
             //let query = req.uri().query().unwrap().to_string();
