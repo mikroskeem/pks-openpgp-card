@@ -6,7 +6,7 @@ use openpgp_card::KeyType;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-const SCHEME: &'static str = "unix";
+const SCHEME: &str = "unix";
 
 async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     eprintln!(": {}", req.uri());
@@ -16,8 +16,8 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     let host = String::from_utf8_lossy(req.headers().get("host").unwrap().as_bytes()).to_string();
 
     let split = req.uri().to_string();
-    let split = split.split("?").collect::<Vec<_>>()[0];
-    let split = split.split("/").collect::<Vec<_>>().split_off(1);
+    let split = split.split('?').collect::<Vec<_>>()[0];
+    let split = split.split('/').collect::<Vec<_>>().split_off(1);
     //    let params = url::Url::parse(&req.uri().to_string()).unwrap();
     //let params = req.uri().query_pairs().collect::<Vec<_>>();
     //eprintln!(" P: {:?}", params);
@@ -32,7 +32,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         }
         //return Ok(Response::
 
-        for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or(Vec::new()) {
+        for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or_default() {
             let mut app = openpgp_card::CardApp::from(card);
             let ard = app.get_application_related_data().unwrap();
             let fingerprints = ard.get_fingerprints().unwrap();
@@ -209,10 +209,10 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 return Ok(resp);
             }
         }
-        return Ok(Response::builder()
+        Ok(Response::builder()
             .status(http::StatusCode::NOT_FOUND)
             .body(Default::default())
-            .unwrap());
+            .unwrap())
 
     /*
     let mut app = openpgp_card::CardApp::from(
@@ -232,7 +232,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
         if op == "public" {
             let fingerprint = split[0];
-            for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or(Vec::new()) {
+            for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or_default() {
                 let mut app = openpgp_card::CardApp::from(card);
                 let ard = app.get_application_related_data().unwrap();
                 let fingerprints = ard.get_fingerprints().unwrap();
@@ -250,11 +250,12 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                     eprintln!("PK: {:#?}", pub_key);
                     let (content_type, data) = match pub_key {
                         PublicKeyMaterial::R(ref rsa) => {
-                            ("application/prs.wiktor.rsa", rsa.n().to_vec())
+                            ("application/vnd.pks.public.rsa.modulus", rsa.n().to_vec())
                         }
-                        PublicKeyMaterial::E(ref ecc) => {
-                            ("application/prs.wiktor.ed25519", ecc.data().to_vec())
-                        }
+                        PublicKeyMaterial::E(ref ecc) => (
+                            "application/vnd.pks.public.ed25519.compressed",
+                            ecc.data().to_vec(),
+                        ),
                         _ => panic!("Unsupported key type"),
                     };
                     let mut resp = Response::builder();
@@ -271,7 +272,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let card_ident = split[2];
 
             let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
             );
             let body = hyper::body::to_bytes(req.into_body()).await?;
             let dm = openpgp_card::crypto_data::Cryptogram::RSA(&body);
@@ -289,10 +290,10 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let curve = split[2];
             let pin = split[3];
             let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
             );
 
-            if app.verify_pw1(&pin).is_err() {
+            if app.verify_pw1(pin).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -335,10 +336,10 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
             let pin = split[3];
             let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
             );
 
-            if app.verify_pw1_for_signing(&pin).is_err() {
+            if app.verify_pw1_for_signing(pin).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -368,7 +369,10 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
             let sig = app.signature_for_hash(hash).unwrap();
 
-            Ok(Response::new(Body::from(sig)))
+            Ok(Response::builder()
+                .header("Content-Type", "application/vnd.pks.signature.rsa")
+                .body(Body::from(sig))
+                .unwrap())
         } else if op == "ecc-sign" {
             let card_ident = split[0];
 
@@ -376,9 +380,9 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
             let pin = split[3];
             let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
             );
-            if app.verify_pw1_for_signing(&pin).is_err() {
+            if app.verify_pw1_for_signing(pin).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -398,16 +402,18 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             };
 
             let sig = app.signature_for_hash(hash).unwrap();
-
-            Ok(Response::new(Body::from(sig)))
+            Ok(Response::builder()
+                .header("Content-Type", "application/vnd.pks.signature.eddsa.rs")
+                .body(Body::from(sig))
+                .unwrap())
         } else if op == "ecc-auth" {
             let card_ident = split[0];
 
             let pin = split[3];
             let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
+                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
             );
-            if app.verify_pw1(&pin).is_err() {
+            if app.verify_pw1(pin).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
