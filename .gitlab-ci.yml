@@ -15,6 +15,12 @@ check-lint:
   script:
     - cargo clippy --all
 
+check-licences-and-issues:
+  before_script:
+    - cargo install --locked cargo-deny
+  script:
+    - cargo deny check
+
 unit-tests:
   before_script:
     - apt update -y -qq
