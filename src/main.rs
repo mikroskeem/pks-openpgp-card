@@ -4,7 +4,7 @@ use hyper::{Body, Request, Response, Server};
 use openpgp_card::crypto_data::PublicKeyMaterial;
 use openpgp_card::KeyType;
 use std::convert::Infallible;
-use std::net::SocketAddr;
+//use std::net::SocketAddr;
 
 const SCHEME: &str = "unix";
 
@@ -503,17 +503,27 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 #[tokio::main]
 async fn main() {
     // Construct our SocketAddr to listen on...
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    //let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     // And a MakeService to handle each connection...
     let make_service = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(handle)) });
 
+    println!("X");
     // Then bind and serve...
-    let server = Server::bind(&addr).serve(make_service);
-    //let server = Server::bind_unix("/var/run/user/1000/pks").unwrap().serve(make_service);
 
-    // And run forever...
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
+    if let Ok(fds) = std::env::var("LISTEN_FDS") {
+        use hyperlocal::SocketIncoming;
+        use std::os::unix::io::FromRawFd;
+        eprintln!("GOT: {}", fds);
+        let fds: i32 = fds.parse().unwrap();
+        let listener = unsafe { std::os::unix::net::UnixListener::from_raw_fd(fds + 2) };
+        listener.set_nonblocking(true).unwrap();
+        let listener = tokio::net::UnixListener::from_std(listener).unwrap();
+
+        let builder = Server::builder(SocketIncoming::from_listener(listener));
+        let server = builder.serve(make_service);
+        if let Err(e) = server.await {
+            eprintln!("server error: {}", e);
+        }
     }
 }
