@@ -31,9 +31,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             return Ok(Response::new(Body::default()));
         } else if fingerprint == "keys" {
             let mut buf = String::new();
-            for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or_default() {
-                let mut app = openpgp_card::CardApp::from(card);
-                let ard = app.application_related_data().unwrap();
+            for mut pcsc in openpgp_card_pcsc::PcscBackend::cards(None).unwrap_or_default() {
+                let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+                let mut card_tx = card.transaction().unwrap();
+
+                let ard = card_tx.application_related_data().unwrap();
                 let fingerprints = ard.fingerprints().unwrap();
                 let card_id = ard.application_id().unwrap().ident();
                 if let Some(fpr) = fingerprints.signature() {
@@ -50,9 +52,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         }
         //return Ok(Response::
 
-        for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or_default() {
-            let mut app = openpgp_card::CardApp::from(card);
-            let ard = app.application_related_data().unwrap();
+        for mut pcsc in openpgp_card_pcsc::PcscBackend::cards(None).unwrap_or_default() {
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
+
+            let ard = card_tx.application_related_data().unwrap();
             let fingerprints = ard.fingerprints().unwrap();
             eprintln!("FPRS: {:?}", fingerprints);
 
@@ -64,7 +68,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 eprintln!("FOUND!");
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
-                if app.verify_pw1(&pin).is_err() {
+                if card_tx.verify_pw1_user(pin.as_bytes()).is_err() {
                     return Ok(Response::builder()
                         .status(http::StatusCode::UNAUTHORIZED)
                         .body(Default::default())
@@ -120,7 +124,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             {
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
-                if app.verify_pw1_for_signing(&pin).is_err() {
+                if card_tx.verify_pw1_sign(pin.as_bytes()).is_err() {
                     return Ok(Response::builder()
                         .status(http::StatusCode::UNAUTHORIZED)
                         .body(Default::default())
@@ -176,7 +180,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             {
                 let body = hyper::body::to_bytes(req.into_body()).await?;
                 let pin = String::from_utf8_lossy(&body);
-                if app.verify_pw1(&pin).is_err() {
+                if card_tx.verify_pw1_user(pin.as_bytes()).is_err() {
                     return Ok(Response::builder()
                         .status(http::StatusCode::UNAUTHORIZED)
                         .body(Default::default())
@@ -250,9 +254,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
         if op == "public" {
             let fingerprint = split[0];
-            for card in openpgp_card_pcsc::PcscClient::cards().unwrap_or_default() {
-                let mut app = openpgp_card::CardApp::from(card);
-                let ard = app.application_related_data().unwrap();
+            for mut pcsc in openpgp_card_pcsc::PcscBackend::cards(None).unwrap_or_default() {
+                let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+                let mut card_tx = card.transaction().unwrap();
+
+                let ard = card_tx.application_related_data().unwrap();
                 let fingerprints = ard.fingerprints().unwrap();
                 let key_type = if fingerprints.signature().unwrap().to_string() == fingerprint {
                     Some(KeyType::Signing)
@@ -264,7 +270,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                     None
                 };
                 if let Some(key_type) = key_type {
-                    let pub_key = app.public_key(key_type).unwrap();
+                    let pub_key = card_tx.public_key(key_type).unwrap();
                     eprintln!("PK: {:#?}", pub_key);
                     let (content_type, data) = match pub_key {
                         PublicKeyMaterial::R(ref rsa) => {
@@ -289,12 +295,13 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
         } else if op == "rsa-decrypt" {
             let card_ident = split[2];
 
-            let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
-            );
+            let mut pcsc = openpgp_card_pcsc::PcscBackend::open_by_ident(card_ident, None).unwrap();
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
+
             let body = hyper::body::to_bytes(req.into_body()).await?;
             let dm = openpgp_card::crypto_data::Cryptogram::RSA(&body);
-            if let Ok(dec) = app.decipher(dm) {
+            if let Ok(dec) = card_tx.decipher(dm) {
                 Ok(Response::new(Body::from(dec)))
             } else {
                 Ok(Response::builder()
@@ -307,11 +314,12 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
             let curve = split[2];
             let pin = split[3];
-            let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
-            );
 
-            if app.verify_pw1(pin).is_err() {
+            let mut pcsc = openpgp_card_pcsc::PcscBackend::open_by_ident(card_ident, None).unwrap();
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
+
+            if card_tx.verify_pw1_user(pin.as_bytes()).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -330,7 +338,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             };
 
             // Decryption operation on the card
-            let mut dec = if let Ok(dec) = app.decipher(dm) {
+            let mut dec = if let Ok(dec) = card_tx.decipher(dm) {
                 dec
             } else {
                 return Ok(Response::builder()
@@ -353,11 +361,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let card_ident = split[0];
 
             let pin = split[3];
-            let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
-            );
+            let mut pcsc = openpgp_card_pcsc::PcscBackend::open_by_ident(card_ident, None).unwrap();
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
 
-            if app.verify_pw1_for_signing(pin).is_err() {
+            if card_tx.verify_pw1_sign(pin.as_bytes()).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -385,7 +393,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 panic!("Unsupported digest.");
             };
 
-            let sig = app.signature_for_hash(hash).unwrap();
+            let sig = card_tx.signature_for_hash(hash).unwrap();
 
             Ok(Response::builder()
                 .header("Content-Type", "application/vnd.pks.signature.rsa")
@@ -397,10 +405,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let eddsa = split[2] == "Ed25519";
 
             let pin = split[3];
-            let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
-            );
-            if app.verify_pw1_for_signing(pin).is_err() {
+            let mut pcsc = openpgp_card_pcsc::PcscBackend::open_by_ident(card_ident, None).unwrap();
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
+
+            if card_tx.verify_pw1_sign(pin.as_bytes()).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -419,7 +428,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 Hash::ECDSA(&digest)
             };
 
-            let sig = app.signature_for_hash(hash).unwrap();
+            let sig = card_tx.signature_for_hash(hash).unwrap();
             Ok(Response::builder()
                 .header("Content-Type", "application/vnd.pks.signature.eddsa.rs")
                 .body(Body::from(sig))
@@ -430,11 +439,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let card_ident = split[0];
 
             let pin = split[3];
-            let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(&card_ident).unwrap(),
-            );
+            let mut pcsc = openpgp_card_pcsc::PcscBackend::open_by_ident(card_ident, None).unwrap();
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
 
-            if app.verify_pw1(&pin).is_err() {
+            if card_tx.verify_pw1_user(pin.as_bytes()).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -457,7 +466,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
             let hash = Hash::SHA256(digest.to_vec().try_into().unwrap());
 
-            let sig = app.authenticate_for_hash(hash).unwrap();
+            let sig = card_tx.authenticate_for_hash(hash).unwrap();
 
             Ok(Response::builder()
                 .header("Content-Type", "application/vnd.pks.signature.rsa")
@@ -467,10 +476,11 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
             let card_ident = split[0];
 
             let pin = split[3];
-            let mut app = openpgp_card::CardApp::from(
-                openpgp_card_pcsc::PcscClient::open_by_ident(card_ident).unwrap(),
-            );
-            if app.verify_pw1(pin).is_err() {
+            let mut pcsc = openpgp_card_pcsc::PcscBackend::open_by_ident(card_ident, None).unwrap();
+            let mut card = openpgp_card::OpenPgp::new(&mut pcsc);
+            let mut card_tx = card.transaction().unwrap();
+
+            if card_tx.verify_pw1_user(pin.as_bytes()).is_err() {
                 return Ok(Response::builder()
                     .status(http::StatusCode::UNAUTHORIZED)
                     .body(Default::default())
@@ -488,7 +498,7 @@ async fn handle(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                         Hash::ECDSA(&digest)
                     };
             */
-            let sig = app.internal_authenticate(digest).unwrap();
+            let sig = card_tx.internal_authenticate(digest).unwrap();
 
             Ok(Response::new(Body::from(sig)))
         } else {

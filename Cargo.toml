@@ -9,8 +9,8 @@ license = "LGPL-2.0-or-later"
 [dependencies]
 hyper = { version = "0.14.13", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
-openpgp-card-pcsc = { version = "0.1" }
-openpgp-card = { version = "0.1" }
+openpgp-card-pcsc = "0.2"
+openpgp-card = "0.2.1"
 http = "0.2.5"
 url = "2.2.2"
 anyhow = "1"

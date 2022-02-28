@@ -59,6 +59,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "blanket"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b04ce3d2372d05d1ef4ea3fdf427da6ae3c17ca06d688a107b5344836276bc3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -529,11 +540,11 @@ checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
 name = "openpgp-card"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adc08c992c66b259660697da1569c9dc26541a733b4a681ed96ec365a337c63f"
+checksum = "e73d9122de0a4fee7adf4077938931641c7839cbeb671091b5c678edf75522b6"
 dependencies = [
- "anyhow",
+ "blanket",
  "chrono",
  "env_logger",
  "hex-literal",
@@ -545,11 +556,10 @@ dependencies = [
 
 [[package]]
 name = "openpgp-card-pcsc"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb6a10699da46801c4b139cfc026b4cfd4969b1920a451c46ed3c90022c87efc"
+checksum = "33ab0199b52424d186e2ea9e4eccc72c9f6226e8095e625a3ebc8fc5b95cb7b3"
 dependencies = [
- "anyhow",
  "iso7816-tlv",
  "log",
  "openpgp-card",
@@ -583,9 +593,9 @@ dependencies = [
 
 [[package]]
 name = "pcsc"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f7b356209b9904510024c97332563870af40acdc3ccacbae1b3155b87a6f65b"
+checksum = "7e29e4de78a433aeecd06fb5bd55a0f9fde11dc85a14c22d482972c7edc4fdc4"
 dependencies = [
  "bitflags",
  "pcsc-sys",
